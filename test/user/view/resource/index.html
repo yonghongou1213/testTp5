@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <link rel="stylesheet" type="text/css" href="/public/static/js/messenger/messenger.css">
+        <link rel="stylesheet" type="text/css" href="/public/static/js/messenger/messenger-theme-future.css">
+        <link rel="stylesheet" type="text/css" href="/public/static/js/ztree/zTreeStyle.css">
+        <link rel="stylesheet" type="text/css" href="/public/static/js/bootstrap4.0/css/bootstrap.css" />
+
+        <script src="/public/static/js/jquery-3.3.1.min.js"></script>
+        <script src="/public/static/js/popper.min.js"></script>
+        <script src="/public/static/js/bootstrap4.0/js/bootstrap.js"></script>
+        <script src="/public/static/js/messenger/messenger.min.js"></script>
+        <script src="/public/static/js/ztree/jquery.ztree.all.min.js"></script>
+        <script src="/public/static/js/global.js"></script>
+        <script src="/public/static/js/angular-1.6.9/angular.js"></script>
+        <script src="/public/static/js/angular-1.6.9/angular-route.js"></script>
+        <script src="/public/static/js/angular-1.6.9/angular-sanitize.js"></script>
+        <script src="/public/static/js/angular-modules.js"></script>
+        <script>
+            app.controller('resource-index', function($scope, $http, $filter) {
+                $(function(){
+                    $('[data-toggle="tooltip"]').tooltip({trigger:'manual'});
+                    $('#editModal').on('hide.bs.modal',function(){
+                        $scope.group = {};
+                        $('#group_name').tooltip('hide');
+                    })
+                })
+
+                $scope.group = {};
+                $scope.page = {};
+                $scope.page.pageIndex = 0;
+                $scope.page.totalPage = 0;
+                $scope.page.totalSize = 0;
+                $scope.initTree = function(treeId,nodesIds){
+                    $http.post('/user/resource/resource_group_tree',{nodesId:nodesIds}).then(function(data){
+                        var nodes = data.data;
+                        var setting = {
+                            view: {
+                                showLine: true
+                            },
+                            data: {
+                                simpleData: {
+                                    enable: true
+                                }
+                            },
+                            callback: {
+                                onClick: function(event, treeId, treeNode){
+                                    if(treeNode.id == 0){
+                                        return;
+                                    }
+                                    $scope.searchResource(treeNode.id);
+                                }
+                            }
+                        };
+                        $.fn.zTree.init($('#'+treeId), setting, nodes);
+                    })
+                }
+
+                $scope.searchResource = function(groupId){
+
+                }
+
+                $scope.getByPage = function(){
+
+                    $http.post('/user/resource/get_by_page',$.param({})).then(function(data){
+                        var data = data.data;
+                        if(data.success){
+                            $scope.list = data.list;
+                            $scope.page.pageIndex = data.pageIndex;
+                            $scope.page.totalPage = data.totalPage;
+                            $scope.page.totalSize = data.totalSize;
+                        }
+                    })
+                }
+
+                $scope.openEditModal = function(id){
+                    $('#editModal').modal('show');
+                }
+
+                $scope.addGroup = function(){
+                    if($scope.group.group_name==null||$scope.group.group_name==''){
+                        $('#group_name').tooltip('show');
+                    } else{
+                        $('#group_name').tooltip('hide');
+                        $http.post('/user/resource/add_group',$.param($scope.group)).then(function(data){
+                            console.log(data);
+                            var data = data.data;
+                            if(data.success){
+                                successMessage(data.message);
+                                $('#editModal').modal('hide');
+                                $scope.initTree('tree');
+                            }else{
+                                errorMessage(data.message);
+                            }
+                        });
+                    }
+                }
+
+                $scope.editGroup = function(){
+
+                }
+            })
+        </script>
+
+    </head>
+    <body ng-app="app" ng-controller="resource-index" style="padding:10px;">
+        <div class="row">
+            <div class="col-md-2">
+                <div class="card">
+                    <div class="card-header">资源组</div>
+                    <div class="card-body" style="height: 800px">
+                        <div class="btn-group">
+                            <a class="btn btn-outline-success btn-sm" ng-click="openEditModal()">新增</a>
+                            <a class="btn btn-outline-warning btn-sm">修改</a>
+                            <a class="btn btn-outline-danger btn-sm">删除</a>
+                        </div>
+                        <ul id="tree" class="ztree" ng-init="initTree('tree')"></ul>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-10">
+                <div class="card">
+                    <div class="card-header">资源列表</div>
+                    <div class="card-body" style="height: 800px">
+                        <table class="table table-bordered" ng-init="getByPage()">
+                            <thead class="thead-light">
+                                <tr align="center">
+                                    <th>ID</th>
+                                    <th>资源名</th>
+                                    <th>URL</th>
+                                    <th>是否菜单</th>
+                                    <th>说明</th>
+                                    <th>备注</th>
+                                    <th>创建时间</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr ng-repeat="resource in list" style="text-align: center;">
+                                    <td ng-bind="resource.id"></td>
+                                    <td ng-bind="resource.res_name"></td>
+                                    <td ng-bind="resource.url"></td>
+                                    <td>
+                                        <span ng-if="resource.is_menu==1" class="badge badge-success">是</span>
+                                        <span ng-if="resource.is_menu==0" class="badge badge-light">否</span>
+                                    </td>
+                                    <td ng-bind="resource.description"></td>
+                                    <td ng-bind="resource.remark"></td>
+                                    <td ng-bind="resource.create_date"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div class="container">
+                            <ul class="pagination">
+                                <li class="page-item">
+                                    <a class="btn btn-light">«首页</a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="btn btn-light">&lt;上一页</a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="btn btn-light">当前页：</a>
+                                </li>
+                                <li class="page-item">
+                                    <input type="number" class="form-control" aria-describedby="basic-addon1" ng-model="page.pageIndex" style="width:100px;text-align: center">
+                                </li>
+                                <li class="page-item">
+                                    <a class="btn btn-light">下一页&gt;</a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="btn btn-light">尾页»</a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="btn btn-light">共<span ng-bind="page.totalPage"></span>页，<span ng-bind="page.totalSize"></span>条记录</a>
+                                </li>
+                            </ul>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="modal fade" id="editModal" data-backdrop="static">
+            <div class="modal-dialog" style="max-width: 600px;max-height: 800px">
+                <div class="modal-content">
+                    <div class="modal-header" style="background-color: #428bca">
+                        <h4 class="modal-title">编辑资源组</h4>
+                        <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    </div>
+
+                    <div class="modal-body">
+                        <table width="100%" cellpadding="5">
+                            <thead>
+                                <tr>
+                                    <td>
+                                        <div class="input-group" data-toggle="tooltip" data-placement="top" title="必填项" id="group_name">
+                                            <div class="input-group-prepend">
+                                                <div class="input-group-text">组名</div>
+                                            </div>
+                                            <input type="text" class="form-control" ng-model="group.group_name">
+                                            <div class="input-group-append">
+                                                <span class="input-group-text" style="color: red">*</span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <div class="input-group">
+                                            <div class="input-group-prepend">
+                                                <div class="input-group-text">说明</div>
+                                            </div>
+                                            <input type="text" class="form-control" ng-model="group.description">
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <div class="input-group">
+                                            <div class="input-group-prepend">
+                                                <div class="input-group-text">备注</div>
+                                            </div>
+                                            <textarea rows="5" class="form-control" ng-model="group.remark"></textarea>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </thead>
+                        </table>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-success" ng-click="addGroup()">保存</button>
+                        <button type="button" class="btn btn-danger" data-dismiss="modal">关闭</button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+
+
+    </body>
+</html>

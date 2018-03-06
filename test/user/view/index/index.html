@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>主页</title>
+        <link rel="stylesheet" type="text/css" href="/public/static/js/jquery-easyui-1.5.4.2/themes/default/easyui.css">
+        <link rel="stylesheet" type="text/css" href="/public/static/js/jquery-easyui-1.5.4.2/themes/icon.css">
+        <link rel="stylesheet" type="text/css" href="/public/static/js/messenger/messenger.css">
+        <link rel="stylesheet" type="text/css" href="/public/static/js/messenger/messenger-theme-future.css">
+        <link rel="stylesheet" type="text/css" href="/public/static/js/jquery-easyui-1.5.4.2/themes/icon.css">
+        <link rel="stylesheet" type="text/css" href="/public/static/js/ztree/zTreeStyle.css">
+        <script src="/public/static/js/jquery-3.3.1.min.js"></script>
+
+        <script src="/public/static/js/jquery-easyui-1.5.4.2/jquery.easyui.min.js"></script>
+        <script src="/public/static/js/messenger/messenger.min.js"></script>
+        <script src="/public/static/js/ztree/jquery.ztree.all.min.js"></script>
+        <script src="/public/static/js/global.js"></script>
+        <script src="/public/static/js/angular-1.6.9/angular.js"></script>
+        <script src="/public/static/js/angular-1.6.9/angular-route.js"></script>
+        <script src="/public/static/js/angular-1.6.9/angular-sanitize.js"></script>
+        <script src="/public/static/js/angular-modules.js"></script>
+        <script>
+            app.controller('index-index', function($scope, $http, $filter) {
+                $scope.initTree = function(treeId,nodesIds){
+                    $http.post('/Group/rulesTree',{nodesId:nodesIds}).then(function(d){
+                        var nodes = d.data;
+                        if(treeId == 'selectTree'&&$scope.rule!=null&&$scope.rule.pid!=null){
+                            for(var i in nodes){
+                                if(nodes[i]['id']==$scope.rule.pid){
+                                    nodes[i].checked = true;
+                                    break;
+                                }
+                            }
+                        }
+                        $scope.exams = nodes;
+                        var setting = {
+                            view: {
+                                showLine: true
+                            },
+                            data: {
+                                simpleData: {
+                                    enable: true
+                                }
+                            },
+                            callback: {
+                                onClick: function(event, treeId, treeNode){
+                                    if(treeId=='rulesTree'){
+                                        $scope.ruleId = treeNode.id;
+                                        $scope.searchRules();
+                                    }
+                                },
+                                onCheck: function(event, treeId, treeNode){
+                                    if(treeId=='selectTree'){
+                                        $scope.rule.pid = treeNode.id;
+                                    }
+                                }
+
+                            }
+                        };
+                        if(treeId == 'selectTree'){
+                            setting.check = {enable:true,chkStyle: "radio",radioType: "all"};
+                        }
+                        $.fn.zTree.init($('#'+treeId), setting, nodes);
+                    })
+                }
+            })
+        </script>
+
+    </head>
+    <body ng-controller="index-index">
+        <div id="fullpanel" class="easyui-layout" style="width:100%;height:900px;">
+            <div data-options="region:'west',title:'资源组',split:true" style="width:20%;">
+                <ul id="tree" class="ztree" ng-init="initTree('rulesTree')"></ul>
+
+            </div>
+            <div data-options="region:'center',title:'资源'" style="padding:5px;background:#eee;"></div>
+        </div>
+
+    </body>
+</html>
