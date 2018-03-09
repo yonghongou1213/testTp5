@@ -7,6 +7,8 @@
         <link rel="stylesheet" type="text/css" href="/public/static/js/messenger/messenger-theme-future.css">
         <link rel="stylesheet" type="text/css" href="/public/static/js/ztree/zTreeStyle.css">
         <link rel="stylesheet" type="text/css" href="/public/static/js/bootstrap4.0/css/bootstrap.css" />
+        <link href="/public/static/js/bootstrap4.0/open-iconic/font/css/open-iconic-bootstrap.css" rel="stylesheet">
+        <link rel="stylesheet" type="text/css" href="/public/static/css/global.css" />
 
         <script src="/public/static/js/jquery-3.3.1.min.js"></script>
         <script src="/public/static/js/popper.min.js"></script>
@@ -26,15 +28,26 @@
                         $scope.group = {};
                         $('#group_name').tooltip('hide');
                     })
+                    $('#resourceModal').on('hide.bs.modal',function(){
+                        $scope.entity = {};
+                        $scope.entity.group_id = $scope.groupId;
+                        var ids = ['res_name','url'];
+                        for(var i in ids){
+                            $('#'+ids[i]).tooltip('hide');
+                        }
+                    })
                 })
 
                 $scope.group = {};
                 $scope.page = {};
+                $scope.entity = {};
                 $scope.page.pageIndex = 0;
                 $scope.page.totalPage = 0;
                 $scope.page.totalSize = 0;
-                $scope.initTree = function(treeId,nodesIds){
-                    $http.post('/user/resource/resource_group_tree',{nodesId:nodesIds}).then(function(data){
+
+                /*树初始化*/
+                $scope.initTree = function(treeId){
+                    $http.post('/user/resource/resource_group_tree',{}).then(function(data){
                         var nodes = data.data;
                         var setting = {
                             view: {
@@ -47,10 +60,16 @@
                             },
                             callback: {
                                 onClick: function(event, treeId, treeNode){
-                                    if(treeNode.id == 0){
-                                        return;
+                                    $scope.groupId = treeNode.id;
+                                    $scope.entity.group_id = treeNode.id;
+                                    $scope.group.pid = treeNode.id;
+
+                                    if($scope.groupId == 0){
+                                        $scope.parent_group = null;
+                                    }else{
+                                        $scope.getParentGroupName(treeNode.id);
                                     }
-                                    $scope.searchResource(treeNode.id);
+                                    $scope.getByPage();
                                 }
                             }
                         };
@@ -58,13 +77,18 @@
                     })
                 }
 
-                $scope.searchResource = function(groupId){
-
-                }
-
+                /*资源分页*/
                 $scope.getByPage = function(){
-
-                    $http.post('/user/resource/get_by_page',$.param({})).then(function(data){
+                    var params = [];
+                    if($scope.groupId!=null&&$scope.groupId!=0){
+                        var child = {
+                            name:'group_id',
+                            op:'eq',
+                            value:$scope.groupId
+                        };
+                        params.push(child);
+                    }
+                    $http.post('/user/common/common_page',$.param({data:params,model:'resource'})).then(function(data){
                         var data = data.data;
                         if(data.success){
                             $scope.list = data.list;
@@ -75,17 +99,37 @@
                     })
                 }
 
-                $scope.openEditModal = function(id){
+                /*新增资源组，打开编辑框*/
+                $scope.beginAddGroup = function(){
+                    $scope.getParentGroupName($scope.groupId);
                     $('#editModal').modal('show');
                 }
 
-                $scope.addGroup = function(){
-                    if($scope.group.group_name==null||$scope.group.group_name==''){
-                        $('#group_name').tooltip('show');
-                    } else{
-                        $('#group_name').tooltip('hide');
-                        $http.post('/user/resource/add_group',$.param($scope.group)).then(function(data){
-                            console.log(data);
+                /*修改，打开编辑框*/
+                $scope.beginEditGroup = function(){
+                    if($scope.groupId==null){
+                        errorMessage('请先选择一个资源组节点');
+                        return;
+                    }
+                    if($scope.groupId==0){
+                        errorMessage('根节点不能操作');
+                        return;
+                    }
+                    $scope.getOneGroup($scope.groupId);
+                    $('#editModal').modal('show');
+                }
+
+
+                /*保存资源组*/
+                $scope.saveGroup = function(){
+                    if($scope.checkGroup){
+                        var url;
+                        if($scope.group.id==null){
+                            url = '/user/common/common_add';
+                        }else{
+                            url = '/user/common/common_edit';
+                        }
+                        $http.post(url,$.param({data:$scope.group,model:'resource_group'})).then(function(data){
                             var data = data.data;
                             if(data.success){
                                 successMessage(data.message);
@@ -94,12 +138,133 @@
                             }else{
                                 errorMessage(data.message);
                             }
+                        })
+                    }
+                }
+
+                /*验证资源组内容*/
+                $scope.checkGroup = function(){
+                    if($scope.group.group_name==null||$scope.group.group_name==''){
+                        $('#group_name').tooltip('show');
+                        return false;
+                    }
+                    $('#group_name').tooltip('hide');
+                    return true;
+                }
+
+                /*查询单个资源组*/
+                $scope.getOneGroup = function(id){
+                    $http.get('/user/common/common_get_one',$.param({id:id,model:'resource_group'})).then(function(data){
+                        var data = data.data;
+                        if(data.success){
+                            $scope.group = data.data;
+                            $scope.getParentGroupName(data.data.pid);
+                            $('#editModal').modal('show');
+                        }else{
+                            errorMessage(data.message);
+                        }
+                    })
+                }
+
+                /*删除确认*/
+                $scope.delConfirm = function(){
+                    if($scope.groupId==null){
+                        errorMessage('请选择你要删除的组');
+                        return;
+                    }
+                    if($scope.groupId==0){
+                        errorMessage('根节点不能删除');
+                        return;
+                    }
+                    var treeObj = $.fn.zTree.getZTreeObj("tree");
+                    var nodes = treeObj.getSelectedNodes();
+                    if(nodes[0].isParent){
+                        errorMessage('该组下面有子组，不能删除');
+                        return;
+                    }
+                    $http.post('/user/resource/count_group',$.param({groupId:$scope.groupId})).then(function(data){
+                        var data = data.data;
+                        if(data.success){
+                            $('#delConfirmModal').modal('show');
+                        }else{
+                            errorMessage(data.message);
+                        }
+                    });
+                }
+
+                /*删除单个资源组*/
+                $scope.removeGroup = function(){
+                    $http.post('/user/common/common_delete',$.param({id:$scope.groupId,model:'resource_group'})).then(function(data){
+                        var data = data.data;
+                        if(data.success){
+                            successMessage(data.message);
+                            $('#delConfirmModal').modal('hide');
+                            $scope.groupId = null;
+                            $scope.parent_group = null;
+                            $scope.entity.group_id = null;
+                            $scope.initTree('tree');
+                        }else{
+                            errorMessage(data.message);
+                        }
+                    })
+                }
+
+                /*获取父组名称*/
+                $scope.getParentGroupName = function(pid){
+                    var treeObj = $.fn.zTree.getZTreeObj("tree");
+                    var nodes = treeObj.transformToArray(treeObj.getNodes());
+                    for(var i in nodes){
+                        if(nodes[i].id == pid){
+                            $scope.parent_group = nodes[i].name;
+                            break;
+                        }
+                    }
+                }
+
+                /*新增资源，打开编辑框*/
+                $scope.openResourceModal = function(id){
+                    if(id!=null){
+                        $scope.getOneResource(id);
+                    }else{
+                        $scope.entity.is_menu = '0';
+                        $('#resourceModal').modal('show');
+                    }
+                }
+
+                /*保存资源*/
+                $scope.saveResource = function(){
+                    if($scope.checkResource()){
+                        var url;
+                        if($scope.entity.id!=null){
+                            url = '/user/common/common_add';
+                        }else{
+                            url = '/';
+                        }
+                        $http.post(url,$.param({data:$scope.entity,model:'resource'})).then(function(data){
+                            var data = data;
                         });
                     }
                 }
 
-                $scope.editGroup = function(){
+                /*验证资源*/
+                $scope.checkResource = function(){
+                    var ids = ['res_name','url'];
+                    var flag = true;
+                    for(var i in ids){
+                        if($scope.entity[ids[i]]==null&&$scope.entity[ids[i]]==''){
+                            $('#'+ids[i]).tooltip('show');
+                            flag = false;
+                        }else{
+                            $('#'+ids[i]).tooltip('hide');
+                        }
+                    }
+                    return flag;
+                }
 
+
+
+                $scope.getOneResource = function(id){
+                    console.log(this.resource.id);
                 }
             })
         </script>
@@ -112,9 +277,9 @@
                     <div class="card-header">资源组</div>
                     <div class="card-body" style="height: 800px">
                         <div class="btn-group">
-                            <a class="btn btn-outline-success btn-sm" ng-click="openEditModal()">新增</a>
-                            <a class="btn btn-outline-warning btn-sm">修改</a>
-                            <a class="btn btn-outline-danger btn-sm">删除</a>
+                            <a class="btn btn-outline-success btn-sm" ng-click="beginAddGroup()">新增</a>
+                            <a class="btn btn-outline-warning btn-sm" ng-click="beginEditGroup()">修改</a>
+                            <a class="btn btn-outline-danger btn-sm" ng-click="delConfirm()">删除</a>
                         </div>
                         <ul id="tree" class="ztree" ng-init="initTree('tree')"></ul>
                     </div>
@@ -124,30 +289,37 @@
                 <div class="card">
                     <div class="card-header">资源列表</div>
                     <div class="card-body" style="height: 800px">
-                        <table class="table table-bordered" ng-init="getByPage()">
+                        <button type="button" class="btn btn-secondary" ng-click="openResourceModal()"><span class="oi oi-plus">添加</span></button>
+                        <button type="button" class="btn btn-secondary"><span class="oi oi-loop-circular">刷新</span></button>
+                        <table class="table table-bordered" ng-init="getByPage()" style="table-layout:fixed">
                             <thead class="thead-light">
                                 <tr align="center">
-                                    <th>ID</th>
-                                    <th>资源名</th>
-                                    <th>URL</th>
-                                    <th>是否菜单</th>
-                                    <th>说明</th>
-                                    <th>备注</th>
-                                    <th>创建时间</th>
+                                    <th width="8%">ID</th>
+                                    <th width="10%">资源名</th>
+                                    <th width="12%">URL</th>
+                                    <th width="8%" class="autoHide">是否菜单</th>
+                                    <th width="12%">说明</th>
+                                    <th width="15%">备注</th>
+                                    <th width="14%">创建时间</th>
+                                    <th width="10%">操作</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr ng-repeat="resource in list" style="text-align: center;">
                                     <td ng-bind="resource.id"></td>
-                                    <td ng-bind="resource.res_name"></td>
-                                    <td ng-bind="resource.url"></td>
+                                    <td ng-bind="resource.res_name" class="autoHide" title="{{resource.res_name}}"></td>
+                                    <td ng-bind="resource.url" class="autoHide" title="{{resource.url}}"></td>
                                     <td>
                                         <span ng-if="resource.is_menu==1" class="badge badge-success">是</span>
                                         <span ng-if="resource.is_menu==0" class="badge badge-light">否</span>
                                     </td>
-                                    <td ng-bind="resource.description"></td>
-                                    <td ng-bind="resource.remark"></td>
-                                    <td ng-bind="resource.create_date"></td>
+                                    <td ng-bind="resource.description" class="autoHide" title="{{resource.description}}"></td>
+                                    <td ng-bind="resource.remark" class="autoHide" title="{{resource.remark}}"></td>
+                                    <td ng-bind="resource.create_date" class="autoHide" title="{{resource.create_date}}"></td>
+                                    <td>
+                                        <a class="btn btn-light btn-sm" ng-click="getOneResource()"><span class="oi oi-pencil" title="icon name" aria-hidden="true"></span></a>
+                                        <a class="btn btn-light btn-sm"><span class="oi oi-trash" title="icon name" aria-hidden="true"></span></a>
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
@@ -190,7 +362,6 @@
                         <h4 class="modal-title">编辑资源组</h4>
                         <button type="button" class="close" data-dismiss="modal">&times;</button>
                     </div>
-
                     <div class="modal-body">
                         <table width="100%" cellpadding="5">
                             <thead>
@@ -204,6 +375,17 @@
                                             <div class="input-group-append">
                                                 <span class="input-group-text" style="color: red">*</span>
                                             </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <div class="input-group">
+                                            <div class="input-group-prepend">
+                                                <div class="input-group-text">父组</div>
+                                            </div>
+                                            <input type="text" class="form-control" ng-model="group.pid" ng-show="false">
+                                            <input type="text" class="form-control" ng-model="parent_group" ng-disabled="true">
                                         </div>
                                     </td>
                                 </tr>
@@ -230,12 +412,112 @@
                             </thead>
                         </table>
                     </div>
-
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-success" ng-click="addGroup()">保存</button>
+                        <button type="button" class="btn btn-success" ng-click="saveGroup()">保存</button>
                         <button type="button" class="btn btn-danger" data-dismiss="modal">关闭</button>
                     </div>
+                </div>
+            </div>
+        </div>
 
+        <div class="modal fade" tabindex="-1" role="dialog" data-backdrop="static" id="delConfirmModal">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">删除确认</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <p>即将删除数据，确定吗？</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-success" ng-click="removeGroup()">删除</button>
+                        <button type="button" class="btn btn-danger" data-dismiss="modal">取消</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="resourceModal" data-backdrop="static">
+            <div class="modal-dialog" style="max-width: 600px;max-height: 800px">
+                <div class="modal-content">
+                    <div class="modal-header" style="background-color: #428bca">
+                        <h4 class="modal-title">编辑资源</h4>
+                        <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <table width="100%" cellpadding="5">
+                            <thead>
+                            <tr>
+                                <th width="15%"><label>资源名</label></th>
+                                <td>
+                                    <div class="input-group" data-toggle="tooltip" data-placement="top" title="必填项" id="res_name">
+                                        <input type="text" class="form-control" ng-model="entity.res_name">
+                                        <div class="input-group-append">
+                                            <span class="input-group-text" style="color: red">*</span>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th><label>资源名</label></th>
+                                <td>
+                                    <div class="input-group" data-toggle="tooltip" data-placement="top" title="必填项" id="url">
+                                        <input type="text" class="form-control" ng-model="entity.url">
+                                        <div class="input-group-append">
+                                            <span class="input-group-text" style="color: red">*</span>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th><label>是否菜单</label></th>
+                                <td>
+                                    <div class="input-group">
+                                        <select class="form-control" ng-model="entity.is_menu">
+                                            <option value="1">是</option>
+                                            <option value="0">否</option>
+                                        </select>
+                                        <div class="input-group-append">
+                                            <span class="input-group-text" style="color: red">*</span>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th><label>所属组</label></th>
+                                <td>
+                                    <div class="input-group">
+                                        <input class="form-control" ng-model="entity.group_id" ng-show="false">
+                                        <input class="form-control" ng-model="parent_group" ng-disabled="true">
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th><label>说明</label></th>
+                                <td>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" ng-model="entity.description">
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th><label>备注</label></th>
+                                <td>
+                                    <div class="input-group">
+                                        <textarea rows="5" class="form-control" ng-model="entity.remark"></textarea>
+                                    </div>
+                                </td>
+                            </tr>
+                            </thead>
+                        </table>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-success" ng-click="saveResource()">保存</button>
+                        <button type="button" class="btn btn-danger" data-dismiss="modal">关闭</button>
+                    </div>
                 </div>
             </div>
         </div>
